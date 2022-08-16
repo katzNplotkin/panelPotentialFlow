@@ -155,12 +155,12 @@ class Surface:
                             fh.write("%e\n" % dt[i, j, k])
 
 
-sphere = Surface(1E-6, "sphere.stl", isClosed = True)
+body = Surface(1E-6, "sphere.stl", isClosed = True)
 vinf = [1,0,0]
-RHS = sphere.getRHS(vinf)
+RHS = body.getRHS(vinf)
 print('Computing solution ...')
-gamma = np.linalg.solve(sphere.aic, RHS)
-sphere.assignGamma(gamma)
-sphere.writeVTK(gamma, "sphere.vtk")
-# sphere.writeGrid(vinf, [0,5], [0,5], [0,5], [30, 30, 30], 'grid.tec')
-sphere.writeGrid(vinf, [-250, 260], [-560,-70], [-85,420], [30, 30, 30], 'grid.tec')
+gamma = np.linalg.solve(body.aic, RHS)
+body.assignGamma(gamma)
+body.writeVTK(gamma, "body.vtk")
+# body.writeGrid(vinf, [0,5], [0,5], [0,5], [30, 30, 30], 'grid.tec')
+body.writeGrid(vinf, [-250, 260], [-560,-70], [-85,420], [30, 30, 30], 'grid.tec')
