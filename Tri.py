@@ -73,7 +73,7 @@ class Surface:
                 ncap = np.cross(p1-p0, p2-p1)
 
             ncap = ncap/np.linalg.norm(ncap)
-            self.ele.append(Tri(p0, p1, p2, n, rc))
+            self.ele.append(Tri(p0, p1, p2, ncap, rc))
         print('Computing AIC ...')
         self.aic = self.getAIC()
 
@@ -99,7 +99,7 @@ class Surface:
         RHS = np.zeros((self.nElem))
 
         for i in range(self.nElem):
-            RHS[i] = np.dot(np.array(vinf),  self.ele[i].n)
+            RHS[i] = np.dot(np.array(vinf),  self.ele[i].ncap)
 
         if self.isClosed:
             return RHS[1:]
