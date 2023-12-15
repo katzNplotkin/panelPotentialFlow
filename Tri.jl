@@ -79,15 +79,13 @@ function Surface(filename::String; rc=1e-6, isClosed=true, tol=1e-6)
     geom = readSTL(filename)
     mesh = geom[1]
     nElem = length(mesh.cells)
-    p = zeros(3, 3)
     gamma = zeros(nElem)
 
     ele = Vector{Tri}(undef, nElem)
     for i in 1:nElem
-        p[:, 1] = mesh.points[mesh.cells[i]][1]
-        p[:, 2] = mesh.points[mesh.cells[i]][2]
-        p[:, 3] = mesh.points[mesh.cells[i]][3]
-        ele[i] = Tri(p, rc)
+        ele[i] = Tri(mesh.points[mesh.cells[i]][1],
+                     mesh.points[mesh.cells[i]][2],
+                     mesh.points[mesh.cells[i]][3], rc)
     end
 
     # Compute aic matrix
@@ -117,17 +115,22 @@ function getRHS(self::Surface, vinf)
         RHS[i] = -1 .* dot(vinf, self.ele[i].ncap)
     end
 
-    return self.isClosed ? RHS[2:end] : RHS
+    return RHS
 end
 
 function writeMesh(s::Surface, filename::String; vinf=zeros(3))
     points, cells = getVTKElements(s.mesh)
     ncap = zeros(3, s.nElem)
+    cp = zeros(3, s.nElem)
+    id = 1:s.nElem
     for i = 1:s.nElem
-        ncap[:, i] .= s.ele[i].ncap
+        ncap[:, i] = s.ele[i].ncap
+        cp[:, i] = s.ele[i].cp
     end
     vtk_grid(filename, points, cells) do vtk
         vtk["gamma"] = s.gamma
+        vtk["cell_id"] = id
+        vtk["cp", VTKCellData()] = cp
         vtk["ncap", VTKCellData()] = ncap
         vtk["vel", VTKCellData()] = repeat(vinf, outer=(1, s.nElem))
     end
@@ -155,9 +158,8 @@ body = Surface("octa.stl")
 vinf = [1,0,0]
 RHS = getRHS(body, vinf)
 println("Computing solution ...")
-@show body.aic
-# gamma = solve(body.aic, RHS; isClosed=body.isClosed)
-# assignGamma(body, gamma)
-# writeMesh(body, "out"; vinf=vinf)
+@show gamma = solve(body.aic, RHS; isClosed=body.isClosed)
+assignGamma(body, gamma)
+writeMesh(body, "out"; vinf=vinf)
 # # body.writeGrid(vinf, [0,5], [0,5], [0,5], [30, 30, 30], 'grid.tec')
 # body.writeGrid(vinf, [-250, 260], [-560,-70], [-85,420], [30, 30, 30], 'grid.tec')
