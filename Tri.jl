@@ -177,8 +177,8 @@ end
 #
 #
 
-body = Surface("octa.stl")
-writeMesh(body, "octa")
+body = Surface("sphere.stl")
+writeMesh(body, "out")
 # vinf = [1,0,0]
 # RHS = body.getRHS(vinf)
 # print('Computing solution ...')
