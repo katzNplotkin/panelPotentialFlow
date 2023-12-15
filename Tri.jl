@@ -1,32 +1,35 @@
-using WriteVTK
 using VSPGeom
+using VSPGeom.WriteVTK
 using LinearAlgebra
-using Infiltrator
 
 inv4pi = 0.07957747155
 eps2 = eps()^2
 
 """ Class for handling triangular vortex elements """
-struct Tri
-    p
-    ncap
-    rc
-    cp
+struct Tri{TF}
+    p::Matrix{TF}
+    ncap::Vector{TF}
+    rc::TF
+    cp::Vector{TF}
 end
 
 """ Constructor """
-function Tri(p, ncap, rc)
+function Tri(p, rc)
+    ncap = cross(p[:, 2]-p[:, 1], p[:, 3]-p[:, 2])
+    ncap .= ncap/norm(ncap)
+
     cp = zeros(3)
-    cp .= sum(p; dims=2) / 3
+    cp .= sum(p; dims=2) ./ 3
     return Tri(p, ncap, rc, cp)
 end
 
-function Tri(p1, p2, p3, ncap, rc)
+function Tri(p1::Vector{TF}, p2::Vector{TF}, p3::Vector{TF}, rc::TF) where (TF<:Float64)
     p = zeros(3, 3)
     p[:, 1] = p1
     p[:, 2] = p2
     p[:, 3] = p3
-    return Tri(p, ncap, rc)
+
+    return Tri(p, rc)
 end
 
 """ Induced velocity """
@@ -80,22 +83,18 @@ function Surface(filename::String; rc=1e-6, isClosed=true, tol=1e-6)
     gamma = zeros(nElem)
 
     ele = Vector{Tri}(undef, nElem)
-    ncap = zeros(3)
     for i in 1:nElem
         p[:, 1] = mesh.points[mesh.cells[i]][1]
         p[:, 2] = mesh.points[mesh.cells[i]][2]
         p[:, 3] = mesh.points[mesh.cells[i]][3]
-
-        ncap .= cross(p[:, 2]-p[:, 1], p[:, 3]-p[:, 2])
-        ele[i] = Tri(p, ncap, rc)
+        ele[i] = Tri(p, rc)
     end
 
     # Compute aic matrix
     aic = zeros(nElem, nElem)
 
-    idxStart = isClosed ? 2 : 1
-    for i in idxStart:nElem
-        for j in idxStart:nElem
+    for j in 1:nElem
+        for i in 1:nElem
             aic[i, j] = dot(vind(ele[j], ele[i].cp), ele[i].ncap)
         end
     end
@@ -114,76 +113,51 @@ end
 function getRHS(self::Surface, vinf)
     RHS = zeros(self.nElem)
 
-    for i in range(1:self.nElem)
+    for i in 1:self.nElem
         RHS[i] = -1 .* dot(vinf, self.ele[i].ncap)
     end
 
     return self.isClosed ? RHS[2:end] : RHS
 end
 
-function writeMesh(s::Surface, filename::String)
+function writeMesh(s::Surface, filename::String; vinf=zeros(3))
     points, cells = getVTKElements(s.mesh)
+    ncap = zeros(3, s.nElem)
+    for i = 1:s.nElem
+        ncap[:, i] .= s.ele[i].ncap
+    end
     vtk_grid(filename, points, cells) do vtk
+        vtk["gamma"] = s.gamma
+        vtk["ncap", VTKCellData()] = ncap
+        vtk["vel", VTKCellData()] = repeat(vinf, outer=(1, s.nElem))
     end
 end
 
-#     def assignGamma(self, gamma):
-#         if len(gamma) == self.nElem-1:
-#             self.gamma[0] = 0.0
-#             for i in range(1, self.nElem):
-#                 self.gamma[i] = gamma[i-1]
-#         else:
-#             self.gamma = gamma
-#         self.mesh.cell_data['gamma'] = self.gamma
-#
-#     def writeVTK(self, gamma, VTKfilename):
-#         self.mesh.write(VTKfilename)
-#
-#     def writeGrid(self, vinf, xlim, ylim, zlim, nvec, TECfilename):
-#         x = np.linspace(xlim[0], xlim[1], nvec[0])
-#         y = np.linspace(ylim[0], ylim[1], nvec[1])
-#         z = np.linspace(zlim[0], zlim[1], nvec[2])
-#
-#         xg, yg, zg = np.meshgrid(x, y, z)
-#         u = np.zeros((nvec[0], nvec[1], nvec[2]))
-    #         v = np.zeros((nvec[0], nvec[1], nvec[2]))
-#         w = np.zeros((nvec[0], nvec[1], nvec[2]))
-#
-#         for k in range(nvec[2]):
-#             for j in range(nvec[1]):
-#                 for i in range(nvec[0]):
-#                     u[i,j,k], v[i,j,k], w[i,j,k] = \
-#                             self.vind([xg[i, j, k], \
-#                                        yg[i, j, k], \
-#                                        zg[i, j, k]])
-#
-#         u += vinf[0]
-#         v += vinf[1]
-#         w += vinf[2]
-#
-#         # Write to tec file
-#         with open(TECfilename, "w") as fh:
-#             fh.write('TITLE = "Grid"\n')
-#             fh.write('VARIABLES = "X" "Y" "Z" "U" "V" "W"\n')
-#             fh.write('ZONE I='+ str(nvec[0]) + ' J=' + str(nvec[1])+ \
-#                     ' K=' + str(nvec[2]) + ' DATAPACKING=BLOCK')
-#
-#             for dt in [xg, yg, zg, u, v, w]:
-#                 fh.write("\n")
-#                 for k in range(nvec[2]):
-#                     for j in range(nvec[1]):
-#                         for i in range(nvec[0]):
-#                             fh.write("%e\n" % dt[i, j, k])
-#
-#
+function solve(aic, RHS; isClosed=true)
+    if isClosed
+        return aic[2:end, 2:end] \ RHS[2:end]
+    else
+        return aic \ RHS
+    end
+end
 
-body = Surface("sphere.stl")
-writeMesh(body, "out")
-# vinf = [1,0,0]
-# RHS = body.getRHS(vinf)
-# print('Computing solution ...')
-# gamma = np.linalg.solve(body.aic, RHS)
-# body.assignGamma(gamma)
-# body.writeVTK(gamma, "body.vtk")
+function assignGamma!(s::Surface, gamma)
+    idxStart = 1
+    if length(gamma) == s.nElem-1
+        s.gamma[1] = 0.0
+        idxStart = 2
+    end
+    s.gamma[idxStart:end] .= gamma
+end
+
+# Main program
+body = Surface("octa.stl")
+vinf = [1,0,0]
+RHS = getRHS(body, vinf)
+println("Computing solution ...")
+@show body.aic
+# gamma = solve(body.aic, RHS; isClosed=body.isClosed)
+# assignGamma(body, gamma)
+# writeMesh(body, "out"; vinf=vinf)
 # # body.writeGrid(vinf, [0,5], [0,5], [0,5], [30, 30, 30], 'grid.tec')
 # body.writeGrid(vinf, [-250, 260], [-560,-70], [-85,420], [30, 30, 30], 'grid.tec')
