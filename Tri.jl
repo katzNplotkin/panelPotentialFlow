@@ -154,12 +154,12 @@ function assignGamma!(s::Surface, gamma)
 end
 
 # Main program
-body = Surface("octa.stl")
+body = Surface("airfoilSimple.stl")
 vinf = [1,0,0]
 RHS = getRHS(body, vinf)
 println("Computing solution ...")
-@show gamma = solve(body.aic, RHS; isClosed=body.isClosed)
-assignGamma(body, gamma)
+gamma = solve(body.aic, RHS; isClosed=body.isClosed)
+assignGamma!(body, gamma)
 writeMesh(body, "out"; vinf=vinf)
 # # body.writeGrid(vinf, [0,5], [0,5], [0,5], [30, 30, 30], 'grid.tec')
 # body.writeGrid(vinf, [-250, 260], [-560,-70], [-85,420], [30, 30, 30], 'grid.tec')
